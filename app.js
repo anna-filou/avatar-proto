@@ -15,6 +15,7 @@ let placeholderImage = null;
 let hasSelectedColor = false;
 let activeTab = null;
 let thumbnailCache = {};
+let selectedColorModes = {};
 
 // Convert hex to HSL and add lightness
 function lightenColor(hex, lightnessDelta) {
@@ -168,33 +169,68 @@ function buildRecipe() {
   
   manifest.layers.forEach(layer => {
     const layerName = layer.name;
-    const files = assetsIndex[layerName] || [];
     
     if (layer.required) {
-      if (files.length === 0) {
-        throw new Error(`Required layer "${layerName}" has no assets`);
+      if (hasColorModes(layerName)) {
+        // Layer has color modes: pick random mode first, then random asset
+        const modes = getColorModes(layerName);
+        if (modes.length === 0) {
+          throw new Error(`Required layer "${layerName}" has no color modes`);
+        }
+        const randomModeIndex = Math.floor(Math.random() * modes.length);
+        const selectedMode = modes[randomModeIndex];
+        const files = getAssetsForMode(layerName, selectedMode);
+        if (files.length === 0) {
+          throw new Error(`Required layer "${layerName}" mode "${selectedMode}" has no assets`);
+        }
+        const randomAssetIndex = Math.floor(Math.random() * files.length);
+        recipe[layerName] = `${selectedMode}/${files[randomAssetIndex]}`;
+        selectedColorModes[layerName] = selectedMode;
+      } else {
+        // Layer without modes: pick random asset
+        const files = getAllAssetsForLayer(layerName);
+        if (files.length === 0) {
+          throw new Error(`Required layer "${layerName}" has no assets`);
+        }
+        const randomIndex = Math.floor(Math.random() * files.length);
+        recipe[layerName] = files[randomIndex];
       }
-      const randomIndex = Math.floor(Math.random() * files.length);
-      recipe[layerName] = files[randomIndex];
     } else {
       // Optional layer
-      if (layer.includeChance !== undefined) {
-        const shouldInclude = Math.random() < layer.includeChance;
-        if (shouldInclude && files.length > 0) {
-          const randomIndex = Math.floor(Math.random() * files.length);
-          recipe[layerName] = files[randomIndex];
+      const shouldInclude = layer.includeChance !== undefined 
+        ? Math.random() < layer.includeChance 
+        : Math.random() < 0.5;
+      
+      if (shouldInclude) {
+        if (hasColorModes(layerName)) {
+          // Layer has color modes: pick random mode first, then random asset
+          const modes = getColorModes(layerName);
+          if (modes.length > 0) {
+            const randomModeIndex = Math.floor(Math.random() * modes.length);
+            const selectedMode = modes[randomModeIndex];
+            const files = getAssetsForMode(layerName, selectedMode);
+            if (files.length > 0) {
+              const randomAssetIndex = Math.floor(Math.random() * files.length);
+              recipe[layerName] = `${selectedMode}/${files[randomAssetIndex]}`;
+              selectedColorModes[layerName] = selectedMode;
+            } else {
+              recipe[layerName] = null;
+            }
+          } else {
+            recipe[layerName] = null;
+          }
         } else {
-          recipe[layerName] = null;
+          // Layer without modes: pick random asset
+          const files = getAllAssetsForLayer(layerName);
+          if (files.length > 0) {
+            const randomIndex = Math.floor(Math.random() * files.length);
+            recipe[layerName] = files[randomIndex];
+          } else {
+            recipe[layerName] = null;
+          }
         }
       } else {
-        // Default optional behavior (50% chance)
-        const shouldInclude = Math.random() < 0.5;
-        if (shouldInclude && files.length > 0) {
-          const randomIndex = Math.floor(Math.random() * files.length);
-          recipe[layerName] = files[randomIndex];
-        } else {
-          recipe[layerName] = null;
-        }
+        recipe[layerName] = null;
       }
     }
   });
@@ -210,10 +246,41 @@ function loadImage(layerName, filename) {
       return;
     }
     
+    // Check if filename contains a mode (e.g., "dark/01.png")
+    let imagePath;
+    if (filename.includes('/')) {
+      // New format: mode/filename (e.g., "dark/01.png")
+      imagePath = `assets/${layerName}/${filename}`;
+    } else if (hasColorModes(layerName)) {
+      // Layer has modes but filename doesn't include mode
+      // Try to use selected mode or current recipe mode
+      let mode = selectedColorModes[layerName];
+      if (!mode && currentRecipe && currentRecipe[layerName]) {
+        const recipeValue = currentRecipe[layerName];
+        if (recipeValue.includes('/')) {
+          mode = recipeValue.split('/')[0];
+        }
+      }
+      if (mode) {
+        imagePath = `assets/${layerName}/${mode}/${filename}`;
+      } else {
+        // Fallback: try first available mode
+        const modes = getColorModes(layerName);
+        if (modes.length > 0) {
+          imagePath = `assets/${layerName}/${modes[0]}/${filename}`;
+        } else {
+          imagePath = `assets/${layerName}/${filename}`;
+        }
+      }
+    } else {
+      // Flat structure (no modes)
+      imagePath = `assets/${layerName}/${filename}`;
+    }
+    
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load ${layerName}/${filename}`));
-    img.src = `assets/${layerName}/${filename}`;
+    img.onerror = () => reject(new Error(`Failed to load ${imagePath}`));
+    img.src = imagePath;
   });
 }
 
@@ -327,6 +394,8 @@ function setupColorSelector() {
       
       // Regenerate thumbnails for active tab if one is selected
       if (activeTab) {
+        // Update mode selector if layer has modes
+        renderColorModeSelector(activeTab);
         renderThumbnailGrid(activeTab);
       }
     });
@@ -374,6 +443,46 @@ function getRecipeHash() {
   return JSON.stringify(currentRecipe);
 }
 
+// Check if a layer has color modes (nested structure in index)
+function hasColorModes(layerName) {
+  if (!assetsIndex || !assetsIndex[layerName]) return false;
+  const layerData = assetsIndex[layerName];
+  // If it's an object (not an array), it has color modes
+  return typeof layerData === 'object' && !Array.isArray(layerData);
+}
+
+// Get array of available color modes for a layer
+function getColorModes(layerName) {
+  if (!hasColorModes(layerName)) return [];
+  const layerData = assetsIndex[layerName];
+  return Object.keys(layerData).sort();
+}
+
+// Get assets for a specific mode
+function getAssetsForMode(layerName, mode) {
+  if (!hasColorModes(layerName)) return [];
+  const layerData = assetsIndex[layerName];
+  return layerData[mode] || [];
+}
+
+// Get all assets for a layer (handles both flat and nested structures)
+function getAllAssetsForLayer(layerName) {
+  if (!assetsIndex || !assetsIndex[layerName]) return [];
+  const layerData = assetsIndex[layerName];
+  
+  if (Array.isArray(layerData)) {
+    // Flat structure (no color modes)
+    return layerData;
+  } else {
+    // Nested structure (has color modes) - return all assets from all modes
+    const allAssets = [];
+    Object.values(layerData).forEach(modeAssets => {
+      allAssets.push(...modeAssets);
+    });
+    return allAssets;
+  }
+}
+
 // Setup tab navigation
 function setupTabNavigation() {
   if (!manifest) return;
@@ -397,7 +506,7 @@ function setupTabNavigation() {
       tabButton.classList.add('active');
       activeTab = layer.name;
       
-      // Render thumbnail grid for this layer
+      // Render color mode selector and thumbnail grid for this layer
       renderThumbnailGrid(layer.name);
     });
     
@@ -419,7 +528,21 @@ function setupTabNavigation() {
 async function generateThumbnail(layerName, assetFilename) {
   // Create a temporary recipe with this specific asset
   const tempRecipe = currentRecipe ? { ...currentRecipe } : {};
-  tempRecipe[layerName] = assetFilename;
+  
+  // Handle mode-based filenames (e.g., "dark/01.png")
+  if (assetFilename && assetFilename.includes('/')) {
+    tempRecipe[layerName] = assetFilename;
+  } else if (hasColorModes(layerName)) {
+    // If layer has modes but filename doesn't include mode, use current mode
+    const mode = selectedColorModes[layerName];
+    if (mode && assetFilename) {
+      tempRecipe[layerName] = `${mode}/${assetFilename}`;
+    } else {
+      tempRecipe[layerName] = assetFilename;
+    }
+  } else {
+    tempRecipe[layerName] = assetFilename;
+  }
   
   // Generate cache key based on temp recipe
   const tempRecipeHash = JSON.stringify(tempRecipe);
@@ -469,8 +592,80 @@ async function generateThumbnail(layerName, assetFilename) {
   }
 }
 
+// Render color mode selector for a layer
+function renderColorModeSelector(layerName) {
+  const colorModeSelector = document.getElementById('colorModeSelector');
+  colorModeSelector.innerHTML = '';
+  
+  if (!hasColorModes(layerName)) {
+    colorModeSelector.style.display = 'none';
+    return;
+  }
+  
+  colorModeSelector.style.display = 'flex';
+  const modes = getColorModes(layerName);
+  const currentMode = selectedColorModes[layerName];
+  
+  modes.forEach(mode => {
+    const modeButton = document.createElement('button');
+    modeButton.className = 'color-mode-button';
+    modeButton.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+    modeButton.dataset.mode = mode;
+    modeButton.dataset.layer = layerName;
+    
+    if (currentMode === mode) {
+      modeButton.classList.add('active');
+    }
+    
+    modeButton.addEventListener('click', () => {
+      selectColorMode(layerName, mode);
+    });
+    
+    colorModeSelector.appendChild(modeButton);
+  });
+  
+  // Auto-select first mode if none selected
+  if (!currentMode && modes.length > 0) {
+    selectColorMode(layerName, modes[0]);
+  }
+}
+
+// Handle color mode selection
+async function selectColorMode(layerName, mode) {
+  selectedColorModes[layerName] = mode;
+  
+  // Update active state in mode selector
+  document.querySelectorAll(`.color-mode-button[data-layer="${layerName}"]`).forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.dataset.mode === mode) {
+      btn.classList.add('active');
+    }
+  });
+  
+  // Update current recipe if it exists and uses a different mode
+  if (currentRecipe && currentRecipe[layerName]) {
+    const currentValue = currentRecipe[layerName];
+    // If current value is mode-based, update it
+    if (currentValue.includes('/')) {
+      const parts = currentValue.split('/');
+      const assetName = parts[1] || parts[0];
+      const assets = getAssetsForMode(layerName, mode);
+      if (assets.length > 0) {
+        // Try to keep the same asset number if possible, otherwise use first
+        const assetMatch = assets.find(a => a === assetName) || assets[0];
+        currentRecipe[layerName] = `${mode}/${assetMatch}`;
+        await redrawAvatar();
+        updateRecipeDisplay();
+      }
+    }
+  }
+  
+  // Regenerate thumbnails for the selected mode
+  await renderThumbnailGrid(layerName, mode);
+}
+
 // Render thumbnail grid for a specific layer
-async function renderThumbnailGrid(layerName) {
+async function renderThumbnailGrid(layerName, mode = null) {
   const thumbnailGrid = document.getElementById('thumbnailGrid');
   
   if (!assetsIndex || !assetsIndex[layerName]) {
@@ -478,14 +673,42 @@ async function renderThumbnailGrid(layerName) {
     return;
   }
   
+  // Show color mode selector
+  renderColorModeSelector(layerName);
+  
+  // Determine which mode to use
+  if (hasColorModes(layerName)) {
+    if (!mode) {
+      mode = selectedColorModes[layerName];
+      if (!mode) {
+        // Auto-select first mode if none selected
+        const modes = getColorModes(layerName);
+        if (modes.length > 0) {
+          mode = modes[0];
+          selectedColorModes[layerName] = mode;
+        }
+      }
+    }
+  }
+  
   // If no current recipe exists, create a default one for thumbnail generation
   if (!currentRecipe) {
     currentRecipe = {};
     manifest.layers.forEach(layer => {
       if (layer.required) {
-        const files = assetsIndex[layer.name] || [];
-        if (files.length > 0) {
-          currentRecipe[layer.name] = files[0]; // Use first asset as default
+        if (hasColorModes(layer.name)) {
+          const modes = getColorModes(layer.name);
+          const defaultMode = modes[0];
+          const assets = getAssetsForMode(layer.name, defaultMode);
+          if (assets.length > 0) {
+            currentRecipe[layer.name] = `${defaultMode}/${assets[0]}`;
+            selectedColorModes[layer.name] = defaultMode;
+          }
+        } else {
+          const files = getAllAssetsForLayer(layer.name);
+          if (files.length > 0) {
+            currentRecipe[layer.name] = files[0];
+          }
         }
       } else {
         currentRecipe[layer.name] = null;
@@ -497,7 +720,14 @@ async function renderThumbnailGrid(layerName) {
   }
   
   const layer = manifest.layers.find(l => l.name === layerName);
-  const assets = assetsIndex[layerName];
+  
+  // Get assets based on whether layer has color modes
+  let assets;
+  if (hasColorModes(layerName) && mode) {
+    assets = getAssetsForMode(layerName, mode);
+  } else {
+    assets = getAllAssetsForLayer(layerName);
+  }
   
   // Calculate total number of thumbnails (including "none" for optional layers)
   const totalThumbnails = assets.length + (layer.required ? 0 : 1);
@@ -533,9 +763,11 @@ async function renderThumbnailGrid(layerName) {
   let assetIndex = layer.required ? 0 : 1;
   for (const assetFilename of assets) {
     const currentIndex = assetIndex;
+    // For layers with modes, store full path (mode/filename) for proper selection checking
+    const fullPath = (hasColorModes(layerName) && mode) ? `${mode}/${assetFilename}` : assetFilename;
     thumbnailPromises.push(
-      generateThumbnail(layerName, assetFilename).then(dataUrl => ({
-        filename: assetFilename,
+      generateThumbnail(layerName, fullPath).then(dataUrl => ({
+        filename: fullPath,
         dataUrl: dataUrl,
         isNone: false,
         index: currentIndex
@@ -558,7 +790,12 @@ async function renderThumbnailGrid(layerName) {
     placeholderButton.dataset.filename = filename || 'none';
     
     // Check if this is the currently selected asset
-    const isSelected = currentRecipe && currentRecipe[layerName] === filename;
+    // filename already contains the full path (mode/filename or just filename)
+    let isSelected = false;
+    if (currentRecipe && currentRecipe[layerName]) {
+      const recipeValue = currentRecipe[layerName];
+      isSelected = recipeValue === filename;
+    }
     if (isSelected) {
       placeholderButton.classList.add('selected');
     }
@@ -575,6 +812,7 @@ async function renderThumbnailGrid(layerName) {
     
     // Add click listener
     placeholderButton.addEventListener('click', () => {
+      // filename already contains mode/filename format if layer has modes
       selectAsset(layerName, filename);
     });
   });
@@ -587,9 +825,19 @@ async function selectAsset(layerName, assetFilename) {
     currentRecipe = {};
     manifest.layers.forEach(layer => {
       if (layer.required) {
-        const files = assetsIndex[layer.name] || [];
-        if (files.length > 0) {
-          currentRecipe[layer.name] = files[0]; // Use first asset as default
+        if (hasColorModes(layer.name)) {
+          const modes = getColorModes(layer.name);
+          const defaultMode = modes[0];
+          const assets = getAssetsForMode(layer.name, defaultMode);
+          if (assets.length > 0) {
+            currentRecipe[layer.name] = `${defaultMode}/${assets[0]}`;
+            selectedColorModes[layer.name] = defaultMode;
+          }
+        } else {
+          const files = getAllAssetsForLayer(layer.name);
+          if (files.length > 0) {
+            currentRecipe[layer.name] = files[0];
+          }
         }
       } else {
         currentRecipe[layer.name] = null;
@@ -597,8 +845,14 @@ async function selectAsset(layerName, assetFilename) {
     });
   }
   
-  // Update current recipe
+  // Update current recipe (assetFilename may already include mode, e.g., "dark/01.png")
   currentRecipe[layerName] = assetFilename;
+  
+  // Extract mode from assetFilename if it contains a mode
+  if (assetFilename && assetFilename.includes('/')) {
+    const parts = assetFilename.split('/');
+    selectedColorModes[layerName] = parts[0];
+  }
   
   // Invalidate cache for this layer's thumbnails
   Object.keys(thumbnailCache).forEach(key => {
@@ -610,8 +864,18 @@ async function selectAsset(layerName, assetFilename) {
   // Update selected state in thumbnail grid (without regenerating)
   document.querySelectorAll(`.thumbnail-button[data-layer="${layerName}"]`).forEach(btn => {
     btn.classList.remove('selected');
-    if (btn.dataset.filename === (assetFilename || 'none')) {
-      btn.classList.add('selected');
+    const btnFilename = btn.dataset.filename;
+    // Check if this button matches the selected asset
+    if (assetFilename && assetFilename.includes('/')) {
+      // Mode-based: compare full path
+      if (btnFilename === assetFilename || btnFilename === assetFilename.split('/')[1]) {
+        btn.classList.add('selected');
+      }
+    } else {
+      // Flat: direct comparison
+      if (btnFilename === (assetFilename || 'none')) {
+        btn.classList.add('selected');
+      }
     }
   });
   

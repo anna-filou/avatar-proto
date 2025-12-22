@@ -107,6 +107,36 @@ h1 {
   color: #000;
 }
 
+.color-mode-selector {
+  display: none;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 0 30px;
+}
+
+.color-mode-button {
+  padding: 6px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  border: none;
+  background: #1a1a1a;
+  color: #999;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  border-radius: 6px;
+}
+
+.color-mode-button:hover {
+  background: #2a2a2a;
+  color: #fff;
+}
+
+.color-mode-button.active {
+  background: #fff;
+  color: #000;
+}
+
 .thumbnail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
