@@ -13,6 +13,8 @@ let selectedBackgroundColor = '#3a3a3a';
 let canvasBackgroundColor = null;
 let placeholderImage = null;
 let hasSelectedColor = false;
+let activeTab = null;
+let thumbnailCache = {};
 
 // Convert hex to HSL and add lightness
 function lightenColor(hex, lightnessDelta) {
@@ -89,8 +91,8 @@ function loadPlaceholder() {
   img.onerror = () => {
     console.warn('Placeholder image not found');
     placeholderImage = null;
-    // Draw background color if available
-    if (canvasBackgroundColor) {
+    // Draw background only if user has selected a color
+    if (hasSelectedColor && canvasBackgroundColor) {
       ctx.fillStyle = canvasBackgroundColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -102,15 +104,15 @@ function loadPlaceholder() {
 function drawPlaceholder() {
   if (placeholderImage) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Draw background color (always use canvasBackgroundColor if available)
-    if (canvasBackgroundColor) {
+    // Draw background color only if user has selected a color
+    if (hasSelectedColor && canvasBackgroundColor) {
       ctx.fillStyle = canvasBackgroundColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
     ctx.drawImage(placeholderImage, 0, 0, canvas.width, canvas.height);
   } else {
-    // Draw background if available
-    if (canvasBackgroundColor) {
+    // Draw background only if user has selected a color
+    if (hasSelectedColor && canvasBackgroundColor) {
       ctx.fillStyle = canvasBackgroundColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -133,13 +135,14 @@ async function loadData() {
     assetsIndex = await assetsRes.json();
     
     initCanvas();
-    // Initialize canvas background color to lighter grey
-    if (!canvasBackgroundColor) {
-      canvasBackgroundColor = lightenColor(selectedBackgroundColor, 10);
-    }
+    // Don't initialize canvas background color unless user has selected a color
+    // This keeps the canvas transparent until a color is chosen
     avatarArea.style.backgroundColor = selectedBackgroundColor;
     loadPlaceholder();
     statusText.textContent = 'Ready';
+    
+    // Setup tab navigation after data is loaded
+    setupTabNavigation();
   } catch (error) {
     statusText.textContent = 'Error: ' + error.message;
     console.error(error);
@@ -224,11 +227,19 @@ async function generateAvatar() {
   try {
     statusText.textContent = 'Generating…';
     
-    // Build recipe
+    // Build recipe (completely new recipe)
     currentRecipe = buildRecipe();
+    
+    // Invalidate thumbnail cache since recipe changed
+    thumbnailCache = {};
     
     // Display recipe
     updateRecipeDisplay();
+    
+    // Regenerate thumbnails for active tab if one is selected
+    if (activeTab) {
+      renderThumbnailGrid(activeTab);
+    }
     
     // Load all images
     const imagePromises = manifest.layers.map(layer => 
@@ -239,8 +250,8 @@ async function generateAvatar() {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw background color (always use canvasBackgroundColor if available)
-    if (canvasBackgroundColor) {
+    // Draw background color only if user has selected a color
+    if (hasSelectedColor && canvasBackgroundColor) {
       ctx.fillStyle = canvasBackgroundColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -298,6 +309,9 @@ function setupColorSelector() {
       hasSelectedColor = true;
       avatarArea.style.backgroundColor = selectedBackgroundColor;
       
+      // Invalidate thumbnail cache since color changed
+      thumbnailCache = {};
+      
       // Update recipe display if there's a current recipe
       if (currentRecipe) {
         updateRecipeDisplay();
@@ -309,6 +323,11 @@ function setupColorSelector() {
       } else {
         // Otherwise, redraw the placeholder with new background
         drawPlaceholder();
+      }
+      
+      // Regenerate thumbnails for active tab if one is selected
+      if (activeTab) {
+        renderThumbnailGrid(activeTab);
       }
     });
   });
@@ -328,8 +347,8 @@ async function redrawAvatar() {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw background color (always use canvasBackgroundColor if available)
-    if (canvasBackgroundColor) {
+    // Draw background color only if user has selected a color
+    if (hasSelectedColor && canvasBackgroundColor) {
       ctx.fillStyle = canvasBackgroundColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -348,6 +367,264 @@ async function redrawAvatar() {
 // Event listeners
 generateBtn.addEventListener('click', generateAvatar);
 saveBtn.addEventListener('click', saveAvatar);
+
+// Generate a simple hash of current recipe for cache invalidation
+function getRecipeHash() {
+  if (!currentRecipe) return '';
+  return JSON.stringify(currentRecipe);
+}
+
+// Setup tab navigation
+function setupTabNavigation() {
+  if (!manifest) return;
+  
+  const tabNavigation = document.getElementById('tabNavigation');
+  tabNavigation.innerHTML = '';
+  
+  manifest.layers.forEach(layer => {
+    const tabButton = document.createElement('button');
+    tabButton.className = 'tab-button';
+    tabButton.textContent = layer.name.charAt(0).toUpperCase() + layer.name.slice(1);
+    tabButton.dataset.layer = layer.name;
+    
+    tabButton.addEventListener('click', () => {
+      // Remove active class from all tabs
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      // Add active class to clicked tab
+      tabButton.classList.add('active');
+      activeTab = layer.name;
+      
+      // Render thumbnail grid for this layer
+      renderThumbnailGrid(layer.name);
+    });
+    
+    tabNavigation.appendChild(tabButton);
+  });
+  
+  // Activate first tab by default
+  if (manifest.layers.length > 0) {
+    const firstTab = tabNavigation.querySelector('.tab-button');
+    if (firstTab) {
+      firstTab.classList.add('active');
+      activeTab = manifest.layers[0].name;
+      renderThumbnailGrid(manifest.layers[0].name);
+    }
+  }
+}
+
+// Generate a thumbnail preview for a specific asset
+async function generateThumbnail(layerName, assetFilename) {
+  // Create a temporary recipe with this specific asset
+  const tempRecipe = currentRecipe ? { ...currentRecipe } : {};
+  tempRecipe[layerName] = assetFilename;
+  
+  // Generate cache key based on temp recipe
+  const tempRecipeHash = JSON.stringify(tempRecipe);
+  const cacheKey = `${layerName}:${assetFilename}:${tempRecipeHash}`;
+  
+  // Check cache first
+  if (thumbnailCache[cacheKey]) {
+    return thumbnailCache[cacheKey];
+  }
+  
+  // Create temporary canvas for thumbnail
+  const thumbCanvas = document.createElement('canvas');
+  thumbCanvas.width = 128;
+  thumbCanvas.height = 128;
+  const thumbCtx = thumbCanvas.getContext('2d');
+  
+  // Load all images for the thumbnail
+  const imagePromises = manifest.layers.map(layer => {
+    const filename = tempRecipe[layer.name];
+    return loadImage(layer.name, filename);
+  });
+  
+  try {
+    const images = await Promise.all(imagePromises);
+    
+    // Draw background color only if user has selected a color
+    if (hasSelectedColor && canvasBackgroundColor) {
+      thumbCtx.fillStyle = canvasBackgroundColor;
+      thumbCtx.fillRect(0, 0, thumbCanvas.width, thumbCanvas.height);
+    }
+    
+    // Draw all layers
+    images.forEach((img, index) => {
+      if (img !== null) {
+        thumbCtx.drawImage(img, 0, 0, thumbCanvas.width, thumbCanvas.height);
+      }
+    });
+    
+    // Convert to data URL and cache
+    const dataUrl = thumbCanvas.toDataURL('image/png');
+    thumbnailCache[cacheKey] = dataUrl;
+    
+    return dataUrl;
+  } catch (error) {
+    console.error(`Error generating thumbnail for ${layerName}/${assetFilename}:`, error);
+    return null;
+  }
+}
+
+// Render thumbnail grid for a specific layer
+async function renderThumbnailGrid(layerName) {
+  const thumbnailGrid = document.getElementById('thumbnailGrid');
+  
+  if (!assetsIndex || !assetsIndex[layerName]) {
+    thumbnailGrid.innerHTML = '';
+    return;
+  }
+  
+  // If no current recipe exists, create a default one for thumbnail generation
+  if (!currentRecipe) {
+    currentRecipe = {};
+    manifest.layers.forEach(layer => {
+      if (layer.required) {
+        const files = assetsIndex[layer.name] || [];
+        if (files.length > 0) {
+          currentRecipe[layer.name] = files[0]; // Use first asset as default
+        }
+      } else {
+        currentRecipe[layer.name] = null;
+      }
+    });
+    // Render the default avatar
+    redrawAvatar();
+    updateRecipeDisplay();
+  }
+  
+  const layer = manifest.layers.find(l => l.name === layerName);
+  const assets = assetsIndex[layerName];
+  
+  // Calculate total number of thumbnails (including "none" for optional layers)
+  const totalThumbnails = assets.length + (layer.required ? 0 : 1);
+  
+  // Create placeholder buttons first to maintain layout
+  thumbnailGrid.innerHTML = '';
+  const placeholderButtons = [];
+  
+  for (let i = 0; i < totalThumbnails; i++) {
+    const placeholderButton = document.createElement('button');
+    placeholderButton.className = 'thumbnail-button loading-placeholder';
+    placeholderButton.innerHTML = '<div class="thumbnail-skeleton"></div>';
+    thumbnailGrid.appendChild(placeholderButton);
+    placeholderButtons.push(placeholderButton);
+  }
+  
+  // Create thumbnails for each asset
+  const thumbnailPromises = [];
+  
+  // For optional layers, add a "none" option first
+  if (!layer.required) {
+    thumbnailPromises.push(
+      generateThumbnail(layerName, null).then(dataUrl => ({
+        filename: null,
+        dataUrl: dataUrl,
+        isNone: true,
+        index: 0
+      }))
+    );
+  }
+  
+  // Add all asset thumbnails
+  let assetIndex = layer.required ? 0 : 1;
+  for (const assetFilename of assets) {
+    const currentIndex = assetIndex;
+    thumbnailPromises.push(
+      generateThumbnail(layerName, assetFilename).then(dataUrl => ({
+        filename: assetFilename,
+        dataUrl: dataUrl,
+        isNone: false,
+        index: currentIndex
+      }))
+    );
+    assetIndex++;
+  }
+  
+  const thumbnails = await Promise.all(thumbnailPromises);
+  
+  // Update placeholder buttons with actual thumbnails
+  thumbnails.forEach(({ filename, dataUrl, isNone, index }) => {
+    const placeholderButton = placeholderButtons[index];
+    if (!placeholderButton) return;
+    
+    // Remove placeholder class and skeleton
+    placeholderButton.classList.remove('loading-placeholder');
+    placeholderButton.innerHTML = '';
+    placeholderButton.dataset.layer = layerName;
+    placeholderButton.dataset.filename = filename || 'none';
+    
+    // Check if this is the currently selected asset
+    const isSelected = currentRecipe && currentRecipe[layerName] === filename;
+    if (isSelected) {
+      placeholderButton.classList.add('selected');
+    }
+    
+    if (isNone) {
+      placeholderButton.classList.add('none-option');
+      placeholderButton.textContent = 'None';
+    } else {
+      const thumbImg = document.createElement('img');
+      thumbImg.src = dataUrl || '';
+      thumbImg.alt = filename;
+      placeholderButton.appendChild(thumbImg);
+    }
+    
+    // Add click listener
+    placeholderButton.addEventListener('click', () => {
+      selectAsset(layerName, filename);
+    });
+  });
+}
+
+// Handle asset selection
+async function selectAsset(layerName, assetFilename) {
+  if (!currentRecipe) {
+    // If no recipe exists, create one with defaults first
+    currentRecipe = {};
+    manifest.layers.forEach(layer => {
+      if (layer.required) {
+        const files = assetsIndex[layer.name] || [];
+        if (files.length > 0) {
+          currentRecipe[layer.name] = files[0]; // Use first asset as default
+        }
+      } else {
+        currentRecipe[layer.name] = null;
+      }
+    });
+  }
+  
+  // Update current recipe
+  currentRecipe[layerName] = assetFilename;
+  
+  // Invalidate cache for this layer's thumbnails
+  Object.keys(thumbnailCache).forEach(key => {
+    if (key.startsWith(`${layerName}:`)) {
+      delete thumbnailCache[key];
+    }
+  });
+  
+  // Update selected state in thumbnail grid (without regenerating)
+  document.querySelectorAll(`.thumbnail-button[data-layer="${layerName}"]`).forEach(btn => {
+    btn.classList.remove('selected');
+    if (btn.dataset.filename === (assetFilename || 'none')) {
+      btn.classList.add('selected');
+    }
+  });
+  
+  // Redraw avatar
+  await redrawAvatar();
+  
+  // Update recipe display
+  updateRecipeDisplay();
+  
+  // Note: We don't regenerate thumbnails here to avoid layout shift
+  // Thumbnails will be regenerated when user switches tabs or when needed
+  // The cache invalidation ensures fresh thumbnails next time
+}
 
 // Initialize on load
 loadData();
