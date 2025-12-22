@@ -1,0 +1,43 @@
+{
+  "canvasSize": 1024,
+  "backgroundMode": "transparent",
+  "layers": [
+    {
+      "name": "face",
+      "required": true
+    },
+    {
+      "name": "eyes",
+      "required": true
+    },
+    {
+      "name": "hair",
+      "required": false,
+      "includeChance": 0.95
+    },
+    {
+      "name": "earrings",
+      "required": false,
+      "includeChance": 0.5
+    },
+    {
+      "name": "eyebrows",
+      "required": true
+    },
+    {
+      "name": "tattoo",
+      "required": false,
+      "includeChance": 0.25
+    },
+    {
+      "name": "sunglasses",
+      "required": false,
+      "includeChance": 0.5
+    },
+    {
+      "name": "clothes",
+      "required": true
+    }
+  ]
+}
+
