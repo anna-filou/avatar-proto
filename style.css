@@ -146,25 +146,25 @@ h1 {
 }
 
 .color-mode-button {
-  padding: 6px 12px;
-  font-weight: 600;
-  font-size: 13px;
-  border: none;
-  background: #1a1a1a;
-  color: #999;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 2px solid #444;
+  border-radius: 24%;
   cursor: pointer;
-  transition: background-color 0.2s, color 0.2s;
-  border-radius: 6px;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  flex-shrink: 0;
 }
 
 .color-mode-button:hover {
-  background: #2a2a2a;
-  color: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
 }
 
 .color-mode-button.active {
-  background: #fff;
-  color: #000;
+  border-color: #fff;
+  border-width: 3px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
 }
 
 .thumbnail-grid {

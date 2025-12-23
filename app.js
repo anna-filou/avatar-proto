@@ -17,6 +17,19 @@ let activeTab = null;
 let thumbnailCache = {};
 let selectedColorModes = {};
 
+// Color mapping for color modes (mode name -> hex color)
+const colorModeColors = {
+  // Face modes
+  '01': '#FFCBA5',  // Light skin tone
+  '02': '#C17A59',  // Medium-light skin tone
+  '03': '#8F4F33',  // Medium skin tone
+  '04': '#622B1A',  // Dark skin tone (saddle brown)
+  
+  // Eyebrow modes
+  'color2': '#654321', // Darker brown
+  'color3': '#3D2817'  // Dark brown
+};
+
 // Convert hex to HSL and add lightness
 function lightenColor(hex, lightnessDelta) {
   // Remove # if present
@@ -609,9 +622,13 @@ function renderColorModeSelector(layerName) {
   modes.forEach(mode => {
     const modeButton = document.createElement('button');
     modeButton.className = 'color-mode-button';
-    modeButton.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+    
+    // Get hex color for this mode, or use mode name as fallback
+    const hexColor = colorModeColors[mode] || '#000000';
     modeButton.dataset.mode = mode;
     modeButton.dataset.layer = layerName;
+    modeButton.dataset.color = hexColor;
+    modeButton.style.backgroundColor = hexColor;
     
     if (currentMode === mode) {
       modeButton.classList.add('active');
