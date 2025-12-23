@@ -373,12 +373,33 @@ function saveAvatar() {
 
 // Handle color selection
 function setupColorSelector() {
-  const colorSwatches = document.querySelectorAll('.color-swatch');
+  const colorPickerBtn = document.getElementById('colorPickerBtn');
+  const colorSwatches = document.getElementById('colorSwatches');
+  const currentColorIndicator = document.getElementById('currentColorIndicator');
+  const swatchButtons = document.querySelectorAll('.color-swatch');
   
-  colorSwatches.forEach(swatch => {
-    swatch.addEventListener('click', () => {
+  // Initialize current color indicator (transparent/default)
+  updateColorIndicator();
+  
+  // Toggle color swatches visibility
+  colorPickerBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    colorSwatches.classList.toggle('visible');
+  });
+  
+  // Close swatches when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!colorPickerBtn.contains(e.target) && !colorSwatches.contains(e.target)) {
+      colorSwatches.classList.remove('visible');
+    }
+  });
+  
+  swatchButtons.forEach(swatch => {
+    swatch.addEventListener('click', (e) => {
+      e.stopPropagation();
+      
       // Remove selected class from all swatches
-      colorSwatches.forEach(s => s.classList.remove('selected'));
+      swatchButtons.forEach(s => s.classList.remove('selected'));
       
       // Add selected class to clicked swatch
       swatch.classList.add('selected');
@@ -388,6 +409,12 @@ function setupColorSelector() {
       canvasBackgroundColor = lightenColor(selectedBackgroundColor, 10);
       hasSelectedColor = true;
       avatarArea.style.backgroundColor = selectedBackgroundColor;
+      
+      // Update color indicator
+      updateColorIndicator();
+      
+      // Close the swatches
+      colorSwatches.classList.remove('visible');
       
       // Invalidate thumbnail cache since color changed
       thumbnailCache = {};
@@ -413,6 +440,21 @@ function setupColorSelector() {
       }
     });
   });
+}
+
+// Update the current color indicator
+function updateColorIndicator() {
+  const currentColorIndicator = document.getElementById('currentColorIndicator');
+  if (!currentColorIndicator) return;
+  
+  if (hasSelectedColor && selectedBackgroundColor) {
+    currentColorIndicator.style.backgroundColor = selectedBackgroundColor;
+    currentColorIndicator.style.border = '2px solid #fff';
+  } else {
+    // Show a default/transparent indicator
+    currentColorIndicator.style.backgroundColor = 'transparent';
+    currentColorIndicator.style.border = '2px solid #666';
+  }
 }
 
 // Redraw avatar with current background color
