@@ -11,6 +11,10 @@
       "required": true
     },
     {
+      "name": "eyebrows",
+      "required": true
+    },
+    {
       "name": "hair",
       "required": false,
       "includeChance": 0.95
@@ -19,10 +23,6 @@
       "name": "earrings",
       "required": false,
       "includeChance": 0.5
-    },
-    {
-      "name": "eyebrows",
-      "required": true
     },
     {
       "name": "tattoo",
