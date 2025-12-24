@@ -478,10 +478,22 @@ function updateColorIndicator() {
   if (hasSelectedColor && selectedBackgroundColor) {
     currentColorIndicator.style.backgroundColor = selectedBackgroundColor;
     currentColorIndicator.style.border = '2px solid #fff';
+    currentColorIndicator.style.backgroundImage = 'none';
+    currentColorIndicator.style.transform = 'none';
   } else {
-    // Show a default/transparent indicator
+    // Show first four colors from color selector when no color is selected in a 2x2 grid
+    // Top row: #E74447 (red), #F9832E (orange)
+    // Bottom row: #6CBF0C (green), #9B62F6 (purple)
     currentColorIndicator.style.backgroundColor = 'transparent';
     currentColorIndicator.style.border = '2px solid #666';
+    currentColorIndicator.style.backgroundImage = `
+      linear-gradient(90deg, #E74447 0%, #E74447 50%, #F9832E 50%, #F9832E 100%),
+      linear-gradient(90deg, #6CBF0C 0%, #6CBF0C 50%, #9B62F6 50%, #9B62F6 100%)
+    `;
+    currentColorIndicator.style.backgroundSize = '100% 50%';
+    currentColorIndicator.style.backgroundPosition = '0 0, 0 100%';
+    currentColorIndicator.style.backgroundRepeat = 'no-repeat';
+    currentColorIndicator.style.transform = 'rotate(45deg)';
   }
 }
 
