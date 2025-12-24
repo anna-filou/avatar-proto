@@ -4,7 +4,13 @@
   "layers": [
     {
       "name": "face",
-      "required": true
+      "required": true,
+      "modeChances": {
+        "01": 0.3167,
+        "02": 0.3167,
+        "03": 0.3167,
+        "04": 0.05
+      }
     },
     {
       "name": "eyes",

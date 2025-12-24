@@ -176,6 +176,34 @@ function updateRecipeDisplay() {
   recipeText.value = recipeLines.join('\n') + '\n' + colorLine;
 }
 
+// Select a weighted random mode based on modeChances in manifest
+function selectWeightedMode(layer, modes) {
+  if (modes.length === 0) return null;
+  
+  // Check if layer has modeChances defined
+  if (layer.modeChances && typeof layer.modeChances === 'object') {
+    // Use weighted selection based on modeChances
+    const random = Math.random();
+    let cumulative = 0;
+    
+    // Normalize probabilities to ensure they sum to 1
+    const total = Object.values(layer.modeChances).reduce((sum, chance) => sum + chance, 0);
+    
+    for (const mode of modes) {
+      const chance = (layer.modeChances[mode] || 0) / total;
+      cumulative += chance;
+      if (random < cumulative) {
+        return mode;
+      }
+    }
+    // Fallback to last mode if rounding errors occur
+    return modes[modes.length - 1];
+  } else {
+    // No modeChances defined, use equal probability
+    return modes[Math.floor(Math.random() * modes.length)];
+  }
+}
+
 // Build a random recipe
 function buildRecipe() {
   const recipe = {};
@@ -190,8 +218,8 @@ function buildRecipe() {
         if (modes.length === 0) {
           throw new Error(`Required layer "${layerName}" has no color modes`);
         }
-        const randomModeIndex = Math.floor(Math.random() * modes.length);
-        const selectedMode = modes[randomModeIndex];
+        // Use weighted selection if modeChances are defined, otherwise random
+        const selectedMode = selectWeightedMode(layer, modes);
         const files = getAssetsForMode(layerName, selectedMode);
         if (files.length === 0) {
           throw new Error(`Required layer "${layerName}" mode "${selectedMode}" has no assets`);
@@ -219,8 +247,8 @@ function buildRecipe() {
           // Layer has color modes: pick random mode first, then random asset
           const modes = getColorModes(layerName);
           if (modes.length > 0) {
-            const randomModeIndex = Math.floor(Math.random() * modes.length);
-            const selectedMode = modes[randomModeIndex];
+            // Use weighted selection if modeChances are defined, otherwise random
+            const selectedMode = selectWeightedMode(layer, modes);
             const files = getAssetsForMode(layerName, selectedMode);
             if (files.length > 0) {
               const randomAssetIndex = Math.floor(Math.random() * files.length);
