@@ -26,8 +26,10 @@ const colorModeColors = {
   '04': '#622B1A',  // Dark skin tone (saddle brown)
   
   // Eyebrow modes
+  'color1': '#FFE6D3', // Light
   'color2': '#654321', // Darker brown
-  'color3': '#3D2817'  // Dark brown
+  'color3': '#3D2817', // Dark brown
+  'color4': '#9B5445'  // Medium-dark
 };
 
 // Convert hex to HSL and add lightness
@@ -214,9 +216,21 @@ function buildRecipe() {
     if (layer.required) {
       if (hasColorModes(layerName)) {
         // Layer has color modes: pick random mode first, then random asset
-        const modes = getColorModes(layerName);
+        let modes = getColorModes(layerName);
         if (modes.length === 0) {
           throw new Error(`Required layer "${layerName}" has no color modes`);
+        }
+        // Special case for eyebrows: color1 only with face mode "01", color3 only with face modes "03" and "04"
+        if (layerName === 'eyebrows' && recipe.face) {
+          const faceMode = recipe.face.split('/')[0];
+          if (faceMode === '03' || faceMode === '04') {
+            // Face modes "03" and "04" only use eyebrow color3
+            modes = modes.filter(mode => mode === 'color3');
+          } else if (faceMode !== '01') {
+            // Exclude color1 if face mode is not "01"
+            modes = modes.filter(mode => mode !== 'color1');
+          }
+          // Face mode "01" can use any eyebrow color (no filtering needed)
         }
         // Use weighted selection if modeChances are defined, otherwise random
         const selectedMode = selectWeightedMode(layer, modes);
@@ -245,8 +259,20 @@ function buildRecipe() {
       if (shouldInclude) {
         if (hasColorModes(layerName)) {
           // Layer has color modes: pick random mode first, then random asset
-          const modes = getColorModes(layerName);
+          let modes = getColorModes(layerName);
           if (modes.length > 0) {
+            // Special case for eyebrows: color1 only with face mode "01", color3 only with face modes "03" and "04"
+            if (layerName === 'eyebrows' && recipe.face) {
+              const faceMode = recipe.face.split('/')[0];
+              if (faceMode === '03' || faceMode === '04') {
+                // Face modes "03" and "04" only use eyebrow color3
+                modes = modes.filter(mode => mode === 'color3');
+              } else if (faceMode !== '01') {
+                // Exclude color1 if face mode is not "01"
+                modes = modes.filter(mode => mode !== 'color1');
+              }
+              // Face mode "01" can use any eyebrow color (no filtering needed)
+            }
             // Use weighted selection if modeChances are defined, otherwise random
             const selectedMode = selectWeightedMode(layer, modes);
             const files = getAssetsForMode(layerName, selectedMode);
@@ -305,10 +331,10 @@ function loadImage(layerName, filename) {
       if (mode) {
         imagePath = `assets/${layerName}/${mode}/${filename}`;
       } else {
-        // Fallback: try first available mode
+        // Fallback: try default mode
         const modes = getColorModes(layerName);
         if (modes.length > 0) {
-          imagePath = `assets/${layerName}/${modes[0]}/${filename}`;
+          imagePath = `assets/${layerName}/${getDefaultMode(layerName, modes)}/${filename}`;
         } else {
           imagePath = `assets/${layerName}/${filename}`;
         }
@@ -553,6 +579,16 @@ function getColorModes(layerName) {
   return Object.keys(layerData).sort();
 }
 
+// Get default mode for a layer
+function getDefaultMode(layerName, modes) {
+  if (layerName === 'face') {
+    return modes.includes('02') ? '02' : modes[0];
+  } else if (layerName === 'eyebrows') {
+    return modes.includes('color2') ? 'color2' : modes[0];
+  }
+  return modes[0];
+}
+
 // Get assets for a specific mode
 function getAssetsForMode(layerName, mode) {
   if (!hasColorModes(layerName)) return [];
@@ -723,9 +759,9 @@ function renderColorModeSelector(layerName) {
     colorModeSelector.appendChild(modeButton);
   });
   
-  // Auto-select first mode if none selected
+  // Auto-select default mode if none selected
   if (!currentMode && modes.length > 0) {
-    selectColorMode(layerName, modes[0]);
+    selectColorMode(layerName, getDefaultMode(layerName, modes));
   }
 }
 
@@ -777,17 +813,17 @@ async function renderThumbnailGrid(layerName, mode = null) {
   
   // Determine which mode to use
   if (hasColorModes(layerName)) {
-    if (!mode) {
-      mode = selectedColorModes[layerName];
       if (!mode) {
-        // Auto-select first mode if none selected
-        const modes = getColorModes(layerName);
-        if (modes.length > 0) {
-          mode = modes[0];
-          selectedColorModes[layerName] = mode;
+        mode = selectedColorModes[layerName];
+        if (!mode) {
+          // Auto-select default mode if none selected
+          const modes = getColorModes(layerName);
+          if (modes.length > 0) {
+            mode = getDefaultMode(layerName, modes);
+            selectedColorModes[layerName] = mode;
+          }
         }
       }
-    }
   }
   
   // If no current recipe exists, create a default one for thumbnail generation
@@ -797,7 +833,7 @@ async function renderThumbnailGrid(layerName, mode = null) {
       if (layer.required) {
         if (hasColorModes(layer.name)) {
           const modes = getColorModes(layer.name);
-          const defaultMode = modes[0];
+          const defaultMode = getDefaultMode(layer.name, modes);
           const assets = getAssetsForMode(layer.name, defaultMode);
           if (assets.length > 0) {
             currentRecipe[layer.name] = `${defaultMode}/${assets[0]}`;
@@ -926,7 +962,7 @@ async function selectAsset(layerName, assetFilename) {
       if (layer.required) {
         if (hasColorModes(layer.name)) {
           const modes = getColorModes(layer.name);
-          const defaultMode = modes[0];
+          const defaultMode = getDefaultMode(layer.name, modes);
           const assets = getAssetsForMode(layer.name, defaultMode);
           if (assets.length > 0) {
             currentRecipe[layer.name] = `${defaultMode}/${assets[0]}`;
