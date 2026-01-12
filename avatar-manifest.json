@@ -18,7 +18,13 @@
     },
     {
       "name": "eyebrows",
-      "required": true
+      "required": true,
+      "modeChances": {
+        "color1": 0.25,
+        "color2": 0.25,
+        "color3": 0.25,
+        "color4": 0.25
+      }
     },
     {
       "name": "hair",
