@@ -5,6 +5,7 @@ const generateBtn = document.getElementById('generateBtn');
 const saveBtn = document.getElementById('saveBtn');
 const statusText = document.getElementById('statusText');
 const recipeText = document.getElementById('recipeText');
+const loadingOverlay = document.getElementById('loadingOverlay');
 
 let manifest = null;
 let assetsIndex = null;
@@ -16,6 +17,8 @@ let hasSelectedColor = false;
 let activeTab = null;
 let thumbnailCache = {};
 let selectedColorModes = {};
+let generationAbortController = null;
+let doorOpenTimeout = null;
 
 // Color mapping for color modes (mode name -> hex color)
 const colorModeColors = {
@@ -358,6 +361,31 @@ async function generateAvatar() {
     return;
   }
   
+  // Cancel any ongoing generation
+  if (generationAbortController) {
+    generationAbortController.abort();
+  }
+  if (doorOpenTimeout) {
+    clearTimeout(doorOpenTimeout);
+    doorOpenTimeout = null;
+  }
+  
+  // Create new abort controller for this generation
+  generationAbortController = new AbortController();
+  const signal = generationAbortController.signal;
+  
+  // Disable generate button during animation
+  generateBtn.disabled = true;
+  
+  // Reset any ongoing animation and restart immediately - remove all door states
+  loadingOverlay.classList.remove('visible', 'opening');
+  // Force a reflow to reset CSS state
+  void loadingOverlay.offsetWidth;
+  // Immediately start closing animation - doors slide in from left and right
+  loadingOverlay.classList.add('visible');
+  const startTime = Date.now();
+  const doorCloseDuration = 600; // Match CSS transition duration
+  
   try {
     statusText.textContent = 'Generating…';
     
@@ -381,7 +409,24 @@ async function generateAvatar() {
     );
     const images = await Promise.all(imagePromises);
     
-    // Clear canvas
+    // Check if generation was cancelled
+    if (signal.aborted) return;
+    
+    // Wait for door closing animation to complete before updating avatar
+    await new Promise(resolve => {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+      setTimeout(() => {
+        if (!signal.aborted) resolve();
+      }, doorCloseDuration);
+    });
+    
+    // Check again if generation was cancelled
+    if (signal.aborted) return;
+    
+    // NOW update the canvas - while door is closed
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Draw background color only if user has selected a color
@@ -398,10 +443,62 @@ async function generateAvatar() {
     });
     
     statusText.textContent = 'Avatar generated';
+    
+    // Check if generation was cancelled
+    if (signal.aborted) return;
+    
+    // Keep door closed for a moment to feel "heavier" (200ms pause)
+    await new Promise(resolve => {
+      if (signal.aborted) {
+        resolve();
+        return;
+      }
+      setTimeout(() => {
+        if (!signal.aborted) resolve();
+      }, 200);
+    });
+    
+    // Check if generation was cancelled
+    if (signal.aborted) return;
+    
+    // Ensure minimum total time of 0.5 seconds (door closing already takes 600ms, so we're good)
+    const elapsedTime = Date.now() - startTime;
+    const minimumTime = 500;
+    if (elapsedTime < minimumTime) {
+      await new Promise(resolve => {
+        if (signal.aborted) {
+          resolve();
+          return;
+        }
+        setTimeout(() => {
+          if (!signal.aborted) resolve();
+        }, minimumTime - elapsedTime);
+      });
+    }
+    
+    // Final check if generation was cancelled
+    if (signal.aborted) return;
   } catch (error) {
     statusText.textContent = 'Error: ' + error.message;
     recipeText.value = '';
     console.error(error);
+  } finally {
+    // Only complete animation if this generation wasn't cancelled
+    if (!generationAbortController || !generationAbortController.signal.aborted) {
+      // Slide doors out (0.6s) - revealing the new avatar
+      // Re-enable button immediately as door starts opening so user can click when avatar is visible
+      generateBtn.disabled = false;
+      loadingOverlay.classList.add('opening');
+      // Wait for doors to slide out, then remove visible and opening classes
+      doorOpenTimeout = setTimeout(() => {
+        loadingOverlay.classList.remove('visible', 'opening');
+        doorOpenTimeout = null;
+      }, 600);
+    } else {
+      // Generation was cancelled, clean up
+      generateBtn.disabled = false;
+      loadingOverlay.classList.remove('visible', 'opening');
+    }
   }
 }
 

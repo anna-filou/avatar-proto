@@ -60,6 +60,7 @@ h1 {
   position: relative;
   flex-shrink: 0;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .canvas-background {
@@ -427,6 +428,12 @@ button {
   opacity: 0.8;
 }
 
+#generateBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .status {
   text-align: center;
   padding: 0 20px 20px;
@@ -451,3 +458,65 @@ button {
   color: #fff;
 }
 
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.loading-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.door-half {
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  background-color: #2a2a2a;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50%;
+}
+
+.door-left {
+  left: 0;
+  transform: translateX(-100%);
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.door-right {
+  right: 0;
+  transform: translateX(100%);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.loading-overlay.visible .door-left {
+  transform: translateX(0);
+}
+
+.loading-overlay.visible .door-right {
+  transform: translateX(0);
+}
+
+.loading-overlay.visible.opening {
+  opacity: 1;
+}
+
+.loading-overlay.visible.opening .door-left {
+  transform: translateX(-100%);
+}
+
+.loading-overlay.visible.opening .door-right {
+  transform: translateX(100%);
+}
