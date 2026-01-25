@@ -49,6 +49,11 @@
     {
       "name": "clothes",
       "required": true
+    },
+    {
+      "name": "facial-hair",
+      "required": false,
+      "includeChance": 0.05
     }
   ]
 }

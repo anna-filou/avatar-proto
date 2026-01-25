@@ -8,6 +8,7 @@ const layerFolders = [
   'face',
   'eyes',
   'hair',
+  'facial-hair',
   'earrings',
   'eyebrows',
   'tattoo',
