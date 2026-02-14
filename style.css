@@ -138,18 +138,38 @@ h1 {
 }
 
 .tab-button {
-  padding: 12px 24px;
+  padding: 12px 16px;
   font-weight: 700;
   border: none;
   background: transparent;
   color: #999;
   cursor: pointer;
-  transition: background-color 0.2s, color 0.2s;
+  transition: background-color 0.2s, color 0.2s, filter 0.2s;
   border-radius: 10px 10px 0 0;
   flex-shrink: 0;
   white-space: nowrap;
   border-bottom: 3px solid transparent;
   margin-bottom: -3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-button .tab-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+  opacity: 0.6;
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+.tab-button:hover .tab-icon {
+  opacity: 1;
+}
+
+.tab-button.active .tab-icon {
+  opacity: 1;
+  filter: brightness(0);
 }
 
 .tab-button:hover {

@@ -21,6 +21,19 @@ let generationAbortController = null;
 let doorOpenTimeout = null;
 let cachedTongueImage = null;
 
+// Layer name -> icon filename for tab buttons
+const layerIcons = {
+  'face': 'face.svg',
+  'eyes': 'eye.svg',
+  'eyebrows': 'eyebrow.svg',
+  'facial-hair': 'mustache.svg',
+  'hair': 'hair.svg',
+  'earrings': 'ear.svg',
+  'tattoo': 'tattoo.svg',
+  'sunglasses': 'glasses.svg',
+  'clothes': 'clothes.svg'
+};
+
 // Color mapping for color modes (mode name -> hex color)
 const colorModeColors = {
   // Face modes
@@ -33,7 +46,16 @@ const colorModeColors = {
   'color1': '#FFE6D3', // Light
   'color2': '#654321', // Darker brown
   'color3': '#3D2817', // Dark brown
-  'color4': '#9B5445'  // Medium-dark
+  'color4': '#9B5445', // Medium-dark
+  // Facial-hair modes (per-layer to avoid overwriting eyebrow color1–color4)
+  'facial-hair': {
+    'color1': '#372C23',
+    'color2': '#804B33',
+    'color3': '#BE5A2A',
+    'color4': '#A97D56',
+    'color5': '#7E736D',
+    'color6': '#DAC2B0'
+  }
 };
 
 // Convert hex to HSL and add lightness
@@ -656,6 +678,8 @@ function getDefaultMode(layerName, modes) {
     return modes.includes('02') ? '02' : modes[0];
   } else if (layerName === 'eyebrows') {
     return modes.includes('color2') ? 'color2' : modes[0];
+  } else if (layerName === 'facial-hair') {
+    return modes.includes('color1') ? 'color1' : modes[0];
   }
   return modes[0];
 }
@@ -726,11 +750,22 @@ function setupTabNavigation() {
   const tabNavigation = document.getElementById('tabNavigation');
   tabNavigation.innerHTML = '';
   
-  manifest.layers.forEach(layer => {
+  const order = manifest.tabOrder && Array.isArray(manifest.tabOrder) ? manifest.tabOrder : manifest.layers.map(l => l.name);
+  const layersByName = new Map(manifest.layers.map(l => [l.name, l]));
+  
+  order.forEach(layerName => {
+    const layer = layersByName.get(layerName);
+    if (!layer) return;
     const tabButton = document.createElement('button');
     tabButton.className = 'tab-button';
-    tabButton.textContent = layer.name.charAt(0).toUpperCase() + layer.name.slice(1);
     tabButton.dataset.layer = layer.name;
+    tabButton.setAttribute('aria-label', layer.name.charAt(0).toUpperCase() + layer.name.slice(1));
+    const iconName = layerIcons[layer.name] || 'face.svg';
+    const img = document.createElement('img');
+    img.src = `icons/${iconName}`;
+    img.alt = '';
+    img.className = 'tab-icon';
+    tabButton.appendChild(img);
     
     tabButton.addEventListener('click', () => {
       // Remove active class from all tabs
@@ -750,12 +785,12 @@ function setupTabNavigation() {
   });
   
   // Activate first tab by default
-  if (manifest.layers.length > 0) {
+  if (order.length > 0) {
     const firstTab = tabNavigation.querySelector('.tab-button');
     if (firstTab) {
       firstTab.classList.add('active');
-      activeTab = manifest.layers[0].name;
-      renderThumbnailGrid(manifest.layers[0].name);
+      activeTab = order[0];
+      renderThumbnailGrid(order[0]);
     }
   }
 }
@@ -835,8 +870,8 @@ function renderColorModeSelector(layerName) {
     const modeButton = document.createElement('button');
     modeButton.className = 'color-mode-button';
     
-    // Get hex color for this mode, or use mode name as fallback
-    const hexColor = colorModeColors[mode] || '#000000';
+    // Get hex color for this mode (per-layer for facial-hair), or use mode name as fallback
+    const hexColor = (colorModeColors[layerName] && colorModeColors[layerName][mode]) || colorModeColors[mode] || '#000000';
     modeButton.dataset.mode = mode;
     modeButton.dataset.layer = layerName;
     modeButton.dataset.color = hexColor;

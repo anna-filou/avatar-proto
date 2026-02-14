@@ -58,15 +58,50 @@
     "22.png",
     "23.png"
   ],
-  "facial-hair": [
-    "01.png",
-    "02.png",
-    "anton.png",
-    "jake.png",
-    "petros-mustache.png",
-    "petros.png",
-    "petur.png"
-  ],
+  "facial-hair": {
+    "color1": [
+      "anton.png",
+      "jake.png",
+      "petros-beard.png",
+      "petros-mustache.png",
+      "petur.png"
+    ],
+    "color2": [
+      "anton.png",
+      "jake.png",
+      "petros-beard.png",
+      "petros-mustache.png",
+      "petur.png"
+    ],
+    "color3": [
+      "anton.png",
+      "jake.png",
+      "petros-beard.png",
+      "petros-mustache.png",
+      "petur.png"
+    ],
+    "color4": [
+      "anton.png",
+      "jake.png",
+      "petros-beard.png",
+      "petros-mustache.png",
+      "petur.png"
+    ],
+    "color5": [
+      "anton.png",
+      "jake.png",
+      "petros-beard.png",
+      "petros-mustache.png",
+      "petur.png"
+    ],
+    "color6": [
+      "anton.png",
+      "jake.png",
+      "petros-beard.png",
+      "petros-mustache.png",
+      "petur.png"
+    ]
+  },
   "earrings": [
     "01.png",
     "02.png",
