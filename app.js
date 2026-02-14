@@ -19,6 +19,7 @@ let thumbnailCache = {};
 let selectedColorModes = {};
 let generationAbortController = null;
 let doorOpenTimeout = null;
+let cachedTongueImage = null;
 
 // Color mapping for color modes (mode name -> hex color)
 const colorModeColors = {
@@ -427,20 +428,7 @@ async function generateAvatar() {
     if (signal.aborted) return;
     
     // NOW update the canvas - while door is closed
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw background color only if user has selected a color
-    if (hasSelectedColor && canvasBackgroundColor) {
-      ctx.fillStyle = canvasBackgroundColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-    
-    // Draw images in stacking order
-    images.forEach((img, index) => {
-      if (img !== null) {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      }
-    });
+    await drawAvatarToContext(ctx, canvas.width, canvas.height, images, currentRecipe);
     
     statusText.textContent = 'Avatar generated';
     
@@ -631,21 +619,7 @@ async function redrawAvatar() {
     );
     const images = await Promise.all(imagePromises);
     
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw background color only if user has selected a color
-    if (hasSelectedColor && canvasBackgroundColor) {
-      ctx.fillStyle = canvasBackgroundColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-    
-    // Draw images in stacking order
-    images.forEach((img, index) => {
-      if (img !== null) {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      }
-    });
+    await drawAvatarToContext(ctx, canvas.width, canvas.height, images, currentRecipe);
   } catch (error) {
     console.error('Error redrawing avatar:', error);
   }
@@ -684,6 +658,40 @@ function getDefaultMode(layerName, modes) {
     return modes.includes('color2') ? 'color2' : modes[0];
   }
   return modes[0];
+}
+
+function shouldDrawTongueOverlay(recipe) {
+  return recipe && recipe.face && (recipe.face.endsWith('/04.png') || recipe.face === '04.png') && recipe['facial-hair'];
+}
+
+function loadTongueImage() {
+  if (cachedTongueImage) return Promise.resolve(cachedTongueImage);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      cachedTongueImage = img;
+      resolve(img);
+    };
+    img.onerror = reject;
+    img.src = 'assets/tongue.png';
+  });
+}
+
+async function drawAvatarToContext(ctx, width, height, layerImages, recipe) {
+  ctx.clearRect(0, 0, width, height);
+  if (hasSelectedColor && canvasBackgroundColor) {
+    ctx.fillStyle = canvasBackgroundColor;
+    ctx.fillRect(0, 0, width, height);
+  }
+  layerImages.forEach((img) => {
+    if (img !== null) {
+      ctx.drawImage(img, 0, 0, width, height);
+    }
+  });
+  if (shouldDrawTongueOverlay(recipe)) {
+    const tongue = await loadTongueImage();
+    ctx.drawImage(tongue, 0, 0, width, height);
+  }
 }
 
 // Get assets for a specific mode
@@ -796,18 +804,7 @@ async function generateThumbnail(layerName, assetFilename) {
   try {
     const images = await Promise.all(imagePromises);
     
-    // Draw background color only if user has selected a color
-    if (hasSelectedColor && canvasBackgroundColor) {
-      thumbCtx.fillStyle = canvasBackgroundColor;
-      thumbCtx.fillRect(0, 0, thumbCanvas.width, thumbCanvas.height);
-    }
-    
-    // Draw all layers
-    images.forEach((img, index) => {
-      if (img !== null) {
-        thumbCtx.drawImage(img, 0, 0, thumbCanvas.width, thumbCanvas.height);
-      }
-    });
+    await drawAvatarToContext(thumbCtx, thumbCanvas.width, thumbCanvas.height, images, tempRecipe);
     
     // Convert to data URL and cache
     const dataUrl = thumbCanvas.toDataURL('image/png');
