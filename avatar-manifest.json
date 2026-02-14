@@ -43,11 +43,6 @@
       "includeChance": 0.25
     },
     {
-      "name": "sunglasses",
-      "required": false,
-      "includeChance": 0.5
-    },
-    {
       "name": "clothes",
       "required": true
     },
@@ -63,6 +58,11 @@
         "color5": 0.1667,
         "color6": 0.1666
       }
+    },
+    {
+      "name": "sunglasses",
+      "required": false,
+      "includeChance": 0.5
     }
   ]
 }
